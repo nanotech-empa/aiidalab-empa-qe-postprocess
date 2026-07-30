@@ -1179,7 +1179,8 @@ def _viewer_download_links(items):
     links = []
     for label, path in items:
         try:
-            href = path.relative_to(APP_ROOT).as_posix()
+            relative_path = path.relative_to(APP_ROOT).as_posix()
+            href = f"/files/apps/{APP_ROOT.name}/{relative_path}"
         except ValueError:
             href = path.as_posix()
         links.append(
