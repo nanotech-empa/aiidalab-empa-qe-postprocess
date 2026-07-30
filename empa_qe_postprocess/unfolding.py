@@ -891,6 +891,8 @@ class ViewerWidget(ipw.VBox):
         )
         self.reference_bands_pk = ipw.IntText(value=0, description="ref bands PK", layout=ipw.Layout(width="250px"))
         self.reference_energy_shift = ipw.FloatText(value=0.0, description="ref shift", layout=ipw.Layout(width="160px"))
+        self.reference_linewidth = ipw.FloatText(value=1.6, description="ref lw", layout=ipw.Layout(width="140px"))
+        self.show_legend = ipw.Checkbox(value=True, description="legend", indent=False, layout=ipw.Layout(width="110px"))
         self.figure_width = ipw.FloatText(value=8.8, description="width [in]", layout=ipw.Layout(width="150px"))
         self.figure_height = ipw.FloatText(value=5.4, description="height [in]", layout=ipw.Layout(width="150px"))
         self.export_dpi = ipw.IntText(value=600, description="export dpi", layout=ipw.Layout(width="160px"))
@@ -909,7 +911,7 @@ class ViewerWidget(ipw.VBox):
                 self.density_contrast,
                 ipw.HTML("<span style='line-height:32px;'>spectral-density controls; contrast 1 = linear</span>"),
             ]),
-            ipw.HBox([self.qe_overlay, self.reference_bands_pk, self.reference_energy_shift, ipw.HTML("<span style='line-height:32px;'>eV</span>")]),
+            ipw.HBox([self.qe_overlay, self.reference_bands_pk, self.reference_energy_shift, ipw.HTML("<span style='line-height:32px;'>eV</span>"), self.reference_linewidth, self.show_legend]),
             ipw.HBox([
                 self.figure_width,
                 self.figure_height,
@@ -1061,6 +1063,7 @@ class ViewerWidget(ipw.VBox):
                     channels=selected_channels,
                     label="primitive reference",
                     energy_shift=reference_shift,
+                    linewidth=max(0.1, float(self.reference_linewidth.value)),
                 )
                 overlay_text = f"primitive reference bands PK {reference_info['pk']} (own EF, shift {reference_shift:+.3f} eV)"
             if self.unfolding_plot_style.value != "density":
@@ -1112,7 +1115,7 @@ class ViewerWidget(ipw.VBox):
 
             _style_unfolding_axis(ax, kline, special_labels, float(self.energy_min.value), float(self.energy_max.value))
             handles, labels = ax.get_legend_handles_labels()
-            if handles:
+            if self.show_legend.value and handles:
                 unique = dict(zip(labels, handles))
                 ax.legend(
                     unique.values(),
@@ -1159,6 +1162,8 @@ class ViewerWidget(ipw.VBox):
                 print("Unfolding plot style:", self.unfolding_plot_style.value)
                 print("Figure size [in]:", figure_width, figure_height)
                 print("Export dpi:", export_dpi)
+                print("Show legend:", bool(self.show_legend.value))
+                print("Reference linewidth:", max(0.1, float(self.reference_linewidth.value)))
                 for summary in plot_summaries:
                     print(summary)
                 print("Overlay:", overlay_text)
@@ -1610,7 +1615,20 @@ def _smooth_band_line(x, y, special_labels):
     return np.asarray(smooth_x), np.asarray(smooth_y)
 
 
-def _plot_bandsdata_lines(ax, bands_node, *, target_kline, target_special_labels, fermi, energy_min, energy_max, channels, label="QE bands", energy_shift=0.0):
+def _plot_bandsdata_lines(
+    ax,
+    bands_node,
+    *,
+    target_kline,
+    target_special_labels,
+    fermi,
+    energy_min,
+    energy_max,
+    channels,
+    label="QE bands",
+    energy_shift=0.0,
+    linewidth=0.95,
+):
     bands = np.asarray(bands_node.get_bands(), dtype=float)
     if bands.ndim == 2:
         bands = bands[np.newaxis, :, :]
@@ -1638,7 +1656,7 @@ def _plot_bandsdata_lines(ax, bands_node, *, target_kline, target_special_labels
                 plot_x,
                 plot_y,
                 color=color,
-                lw=0.95,
+                lw=max(0.1, float(linewidth)),
                 alpha=0.58,
                 antialiased=True,
                 zorder=2,
