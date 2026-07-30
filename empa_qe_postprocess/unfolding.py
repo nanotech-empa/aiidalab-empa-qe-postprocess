@@ -891,6 +891,9 @@ class ViewerWidget(ipw.VBox):
         )
         self.reference_bands_pk = ipw.IntText(value=0, description="ref bands PK", layout=ipw.Layout(width="250px"))
         self.reference_energy_shift = ipw.FloatText(value=0.0, description="ref shift", layout=ipw.Layout(width="160px"))
+        self.figure_width = ipw.FloatText(value=8.8, description="width [in]", layout=ipw.Layout(width="150px"))
+        self.figure_height = ipw.FloatText(value=5.4, description="height [in]", layout=ipw.Layout(width="150px"))
+        self.export_dpi = ipw.IntText(value=600, description="export dpi", layout=ipw.Layout(width="160px"))
         self.retrieved = None
         self.node = None
         self.loaded = None
@@ -907,6 +910,12 @@ class ViewerWidget(ipw.VBox):
                 ipw.HTML("<span style='line-height:32px;'>spectral-density controls; contrast 1 = linear</span>"),
             ]),
             ipw.HBox([self.qe_overlay, self.reference_bands_pk, self.reference_energy_shift, ipw.HTML("<span style='line-height:32px;'>eV</span>")]),
+            ipw.HBox([
+                self.figure_width,
+                self.figure_height,
+                self.export_dpi,
+                ipw.HTML("<span style='line-height:32px;'>SVG keeps text and axes as vector; density maps are embedded at export dpi.</span>"),
+            ]),
             self.status,
             self.details_box,
             self.plot_output,
@@ -996,7 +1005,10 @@ class ViewerWidget(ipw.VBox):
             workdir = RESULTS_DIR / f"qe_unfolding_view_{self.node.pk}"
             workdir.mkdir(parents=True, exist_ok=True)
 
-            fig, ax = plt.subplots(figsize=(8.8, 5.4), dpi=140)
+            figure_width = max(2.0, float(self.figure_width.value))
+            figure_height = max(2.0, float(self.figure_height.value))
+            export_dpi = max(150, int(self.export_dpi.value))
+            fig, ax = plt.subplots(figsize=(figure_width, figure_height), dpi=140)
             overlay_text = "none"
             color_by_channel = {"none": "#d7191c", "up": "#d7191c", "dw": "#2c7bb6"}
             label_by_channel = {"none": "unfolded", "up": "unfolded up", "dw": "unfolded down"}
@@ -1114,23 +1126,65 @@ class ViewerWidget(ipw.VBox):
                 )
             fig.tight_layout()
             outfile = workdir / "unfolded_bandstructure.png"
-            fig.savefig(outfile, bbox_inches="tight", dpi=300)
+            svg_outfile = workdir / "unfolded_bandstructure.svg"
+            with plt.rc_context(
+                {
+                    "svg.fonttype": "none",
+                    "pdf.fonttype": 42,
+                    "ps.fonttype": 42,
+                    "savefig.facecolor": "white",
+                }
+            ):
+                fig.savefig(outfile, bbox_inches="tight", dpi=300)
+                fig.savefig(svg_outfile, bbox_inches="tight", dpi=export_dpi, format="svg")
+            download_links = _viewer_download_links(
+                [
+                    ("Download PNG", outfile),
+                    ("Download SVG", svg_outfile),
+                ]
+            )
             with self.plot_output:
                 display(fig)
+                display(ipw.HTML(download_links))
             plt.close(fig)
-            html_status(self.status, "ok", f"Saved unfolded band plot: <code>{outfile}</code>")
+            html_status(
+                self.status,
+                "ok",
+                "Saved unfolded band plot: "
+                f"<code>{outfile}</code> and publication SVG: <code>{svg_outfile}</code>",
+            )
             with self.details:
                 print("Plotted retrieved unfolding data from PK:", self.node.pk)
                 print("Spin channel:", self.spin_channel.value)
                 print("Unfolding plot style:", self.unfolding_plot_style.value)
+                print("Figure size [in]:", figure_width, figure_height)
+                print("Export dpi:", export_dpi)
                 for summary in plot_summaries:
                     print(summary)
                 print("Overlay:", overlay_text)
                 print("Saved plot:", outfile)
+                print("Saved SVG:", svg_outfile)
         except Exception as exc:
             html_status(self.status, "err", f"<b>Plot failed:</b> {type(exc).__name__}: {exc}")
             with self.details:
                 raise
+
+
+def _viewer_download_links(items):
+    links = []
+    for label, path in items:
+        try:
+            href = path.relative_to(APP_ROOT).as_posix()
+        except ValueError:
+            href = path.as_posix()
+        links.append(
+            f'<a href="{escape(href)}" download>{escape(label)}</a>'
+        )
+    return (
+        '<div style="margin:10px 0 4px 0; font-size:14px;">'
+        + " &nbsp;|&nbsp; ".join(links)
+        + "</div>"
+    )
 
 
 def _plot_unfolded_banduppy_density(
