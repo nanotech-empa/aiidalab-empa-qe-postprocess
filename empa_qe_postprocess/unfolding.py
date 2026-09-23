@@ -1165,9 +1165,11 @@ def _plot_unfolded_banduppy_density(
 
     before = len(ax.collections)
     plotter = banduppy.Plotting(save_figure_dir=str(RESULTS_DIR))
+    kline = np.asarray(kline, dtype=float)
+    unfolded_kpoints = np.column_stack((np.arange(len(kline)), kline))
     with contextlib.redirect_stdout(io.StringIO()):
         plotter.plot_ebs(
-            kpath_in_angs=np.asarray(kline, dtype=float),
+            unfolded_kpoints=unfolded_kpoints,
             unfolded_bandstructure=unfolded,
             fig=ax.figure,
             ax=ax,
