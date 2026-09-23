@@ -2,6 +2,9 @@ __pycache__/
 *.egg-info/
 .ipynb_checkpoints/
 .pytest_cache/
+
+# Numbered copies created when AiiDAlab reopens running notebooks
+*-[0-9]*.ipynb
 search-[0-9]*.ipynb
 submit_qe_unfolding-[0-9]*.ipynb
 view_qe_unfolding-[0-9]*.ipynb
