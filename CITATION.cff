@@ -1,0 +1,11 @@
+# Software authorship source: setup.cfg [metadata].author
+cff-version: 1.2.0
+type: software
+title: aiidalab-empa-qe-postprocess
+message: If you use this software, please cite it and identify the exact version or commit
+  used. See README.md for software attribution and applicable scientific references.
+authors:
+- name: nanotech@surfaces laboratory, Empa
+repository-code: https://github.com/nanotech-empa/aiidalab-empa-qe-postprocess
+url: https://github.com/nanotech-empa/aiidalab-empa-qe-postprocess
+license: MIT
