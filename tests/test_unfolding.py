@@ -5,6 +5,8 @@ from matplotlib.figure import Figure
 
 from empa_qe_postprocess.unfolding import _plot_unfolded_banduppy_density
 
+pytest_plugins = ["aiida.tools.pytest_fixtures"]
+
 
 def test_plot_unfolded_density_with_banduppy_1():
     """Test the released BandUPpy 1 plotting API."""
