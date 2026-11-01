@@ -21,6 +21,7 @@ from aiida.plugins import CalculationFactory, WorkflowFactory
 from aiida_nanotech_empa.workflows.qe.banduppy import (
     _build_reference_primitive_structure,
     _reference_scf_kpoints,
+    reference_spin_settings,
 )
 
 try:
@@ -419,7 +420,31 @@ def html_status(widget, kind, message):
 
 
 
-def reference_preview_text(calc, matrix, tolerance):
+def reference_spin_choice(parameters, mode, magnetic_settings="", *, run_reference=True):
+    """Translate an explicit reference choice into QE SYSTEM spin settings."""
+    if not run_reference:
+        return None
+    if mode is None:
+        reference_spin_settings(parameters)
+        return None
+    if mode == "nonmagnetic":
+        settings = {"nspin": 1}
+    elif mode == "magnetic":
+        try:
+            settings = json.loads(magnetic_settings)
+        except (ValueError, TypeError) as exc:
+            raise ValueError("Enter magnetic reference settings as a JSON object.") from exc
+        if not isinstance(settings, dict):
+            raise ValueError("Magnetic reference settings must be a JSON object.")
+        if settings.get("nspin", 2) != 2:
+            raise ValueError("The magnetic reference choice requires nspin=2.")
+        settings = {**settings, "nspin": 2}
+    else:
+        raise ValueError("Choose nonmagnetic or magnetic primitive-reference settings.")
+    return reference_spin_settings(parameters, settings)
+
+
+def reference_preview_text(calc, matrix, tolerance, *, spin_settings=None, run_reference=True):
     """Return a compact preview of the automatically reconstructed primitive reference."""
     structure = calc.inputs.structure
     reference = _build_reference_primitive_structure(
@@ -434,12 +459,20 @@ def reference_preview_text(calc, matrix, tolerance):
     system = params.get("SYSTEM", {})
     original_charge = system.get("tot_charge", 0)
     original_nspin = system.get("nspin", 1)
+    if not run_reference:
+        reference_spin = "reference bands disabled"
+    elif spin_settings is not None and spin_settings.get("nspin") == 2:
+        reference_spin = "neutral, collinear magnetic; " + json.dumps(spin_settings)
+    elif spin_settings is None and original_nspin != 1:
+        reference_spin = "neutral; choose reference magnetism before submission"
+    else:
+        reference_spin = "neutral, nonmagnetic"
     inv_reference_cell = np.linalg.inv(np.asarray(reference.cell, dtype=float))
     lines = [
         f"Primitive reference formula: {reference.get_formula()} ({len(reference.sites)} atoms)",
         f"PBC: {tuple(reference.pbc)}",
         f"Reference SCF mesh: {tuple(int(value) for value in mesh)}, offset {tuple(float(value) for value in offset)}",
-        f"Reference charge/spin: neutral, nonmagnetic (template tot_charge={original_charge}, nspin={original_nspin})",
+        f"Reference charge/spin: {reference_spin} (template tot_charge={original_charge}, nspin={original_nspin})",
         "Primitive cell vectors (Ang):",
     ]
     lines.extend("  " + np.array2string(np.asarray(vector), precision=6, suppress_small=True) for vector in reference.cell)
@@ -474,6 +507,16 @@ class SubmissionWidget(ipw.VBox):
         self.matrix = ipw.Text(value="[[2, 0, 0], [0, 2, 0], [0, 0, 2]]", description="S", layout=ipw.Layout(width="640px"))
         self.primitive = ipw.Textarea(value="", description="Primitive", layout=ipw.Layout(width="760px", height="70px"))
         self.run_reference = ipw.Checkbox(value=True, description="Run pristine primitive reference bands", indent=False)
+        self.reference_spin = ipw.Dropdown(
+            options=[("Choose for a magnetic source", None), ("Nonmagnetic reference", "nonmagnetic"), ("Magnetic reference: specify moments", "magnetic")],
+            value=None, description="Ref. magnetism", layout=ipw.Layout(width="480px"),
+            style={"description_width": "initial"},
+        )
+        self.reference_moments = ipw.Textarea(
+            value="", description="Ref. moments", disabled=True,
+            placeholder='{"starting_magnetization": {"Fe": 0.5}} or {"tot_magnetization": 2}',
+            layout=ipw.Layout(width="900px", height="65px"),
+        )
         self.primitive_atom_tolerance = ipw.FloatText(value=0.08, description="atom tol", layout=ipw.Layout(width="180px"))
         self.reference_preview = ipw.Textarea(value="Load a QE calculation to preview the primitive reference cell.", description="preview", disabled=True, layout=ipw.Layout(width="900px", height="150px"))
         self.points_source = ipw.Dropdown(options=[("fcc preset", "fcc"), ("hexagonal 2D preset", "hex2d"), ("square 2D preset", "square2d"), ("rectangular 2D preset", "rect2d"), ("SeeK-path from selected structure", "seekpath"), ("custom", "custom")], value="fcc", description="Special k", layout=ipw.Layout(width="360px"))
@@ -516,6 +559,8 @@ class SubmissionWidget(ipw.VBox):
         self.folded_pk = ipw.IntText(value=0, description="Workflow PK", layout=ipw.Layout(width="230px"))
         self.refresh_button = ipw.Button(description="Refresh", icon="refresh", layout=ipw.Layout(width="120px"))
         self.state = {}
+        for widget in (self.reference_spin, self.reference_moments, self.run_reference):
+            widget.observe(self._reference_spin_changed, names="value")
         self.points_source.observe(self._set_points_from_source, names="value")
         for widget in (self.kpoint_spacing, self.path, self.special_points, self.matrix, self.primitive, self.mode):
             widget.observe(self._update_segment_counts, names="value")
@@ -544,6 +589,9 @@ class SubmissionWidget(ipw.VBox):
             ipw.HBox([self.mode, self.matrix]),
             self.primitive,
             ipw.HBox([self.run_reference, self.primitive_atom_tolerance, ipw.HTML("<span style='line-height:32px;'>fractional tolerance for primitive atom clustering</span>")]),
+            self.reference_spin,
+            self.reference_moments,
+            ipw.HTML("For a magnetic reference, specify moments for primitive-cell kinds or the primitive-cell total magnetization. The primitive cell must accommodate the chosen magnetic order."),
             self.reference_preview,
             ipw.HTML("<b>Primitive-cell k-path</b>"),
             ipw.HBox([self.points_source, self.path]),
@@ -614,10 +662,29 @@ class SubmissionWidget(ipw.VBox):
     def _set_points_from_source(self, *_):
         if self.points_source.value in SPECIAL_KPOINT_PRESETS:
             self.special_points.value = format_points(SPECIAL_KPOINT_PRESETS[self.points_source.value])
-        elif self.points_source.value == "seekpath" and self.state.get("template") is not None:
-            points, _ = structure_seekpath_points(self.state["template"].inputs.structure)
-            self.special_points.value = format_points(points)
+        elif self.points_source.value == "seekpath":
+            template = self._template_calculation()
+            if template is not None:
+                points, _ = structure_seekpath_points(template.inputs.structure)
+                self.special_points.value = format_points(points)
         self._update_segment_counts()
+
+    def _template_calculation(self):
+        identifier = self.state.get("template_uuid")
+        return orm.load_node(identifier) if identifier else None
+
+    def _reference_spin_changed(self, *_):
+        self.reference_spin.disabled = not self.run_reference.value
+        self.reference_moments.disabled = not self.run_reference.value or self.reference_spin.value != "magnetic"
+        self._update_reference_preview()
+
+    def _chosen_reference_spin(self, template, *, preview=False):
+        if preview and self.reference_spin.value is None:
+            return None
+        return reference_spin_choice(
+            template.inputs.parameters.get_dict(), self.reference_spin.value,
+            self.reference_moments.value, run_reference=self.run_reference.value,
+        )
 
     def _current_reference_matrix(self, structure):
         sc_default = np.eye(3)
@@ -635,7 +702,7 @@ class SubmissionWidget(ipw.VBox):
         return lengths, counts
 
     def _update_segment_counts(self, *_):
-        template = self.state.get("template")
+        template = self._template_calculation()
         if template is None:
             return
         try:
@@ -650,20 +717,22 @@ class SubmissionWidget(ipw.VBox):
 
 
     def _update_reference_preview(self, *_):
-        template = self.state.get("template")
+        template = self._template_calculation()
         if template is None:
             return
         try:
             structure = template.inputs.structure
             matrix, _, _ = self._current_reference_matrix(structure)
             self.reference_preview.value = reference_preview_text(
-                template, matrix, self.primitive_atom_tolerance.value
+                template, matrix, self.primitive_atom_tolerance.value,
+                spin_settings=self._chosen_reference_spin(template, preview=True),
+                run_reference=self.run_reference.value,
             )
         except Exception as exc:
             self.reference_preview.value = f"Cannot preview primitive reference yet: {type(exc).__name__}: {exc}"
 
     def _update_band_window(self, *_):
-        template = self.state.get("template")
+        template = self._template_calculation()
         if template is None:
             return
         try:
@@ -680,12 +749,18 @@ class SubmissionWidget(ipw.VBox):
 
     def validate(self, _=None):
         self.details.clear_output()
+        previous_template = self.state.get("template_uuid")
+        self.state = {}
         try:
             root, candidates = load_root_and_candidates(self.pk.value)
             self.template.options = [(candidate_summary(item[2]), i) for i, item in enumerate(candidates)]
             if self.template.value is None:
                 self.template.value = 0
             selected = candidates[self.template.value][2]
+            self.state["template_uuid"] = selected.uuid
+            if previous_template != selected.uuid:
+                self.reference_spin.value = None
+                self.reference_moments.value = ""
             structure = selected.inputs.structure
             matrix, fractional_matrix, mismatch = self._current_reference_matrix(structure)
             if self.mode.value == "primitive":
@@ -697,7 +772,11 @@ class SubmissionWidget(ipw.VBox):
             segment_lengths, segment_counts = self._segment_sampling(structure, labels, coords, matrix)
             self.segment_counts.value = format_segment_sampling(labels, segment_lengths, segment_counts)
             spin_settings = qe_spin_unfolding_settings(selected)
-            reference_preview = reference_preview_text(selected, matrix, self.primitive_atom_tolerance.value)
+            reference_preview = reference_preview_text(
+                selected, matrix, self.primitive_atom_tolerance.value,
+                spin_settings=self._chosen_reference_spin(selected, preview=True),
+                run_reference=self.run_reference.value,
+            )
             self.reference_preview.value = reference_preview
             band_window = estimate_qe_band_window(
                 selected,
@@ -708,7 +787,7 @@ class SubmissionWidget(ipw.VBox):
             self.band_window.value = format_band_window(band_window)
             self.state = {
                 "root_pk": root.pk,
-                "template": selected,
+                "template_uuid": selected.uuid,
                 "template_pk": selected.pk,
                 "structure_pk": structure.pk,
                 "matrix": matrix,
@@ -746,6 +825,7 @@ class SubmissionWidget(ipw.VBox):
                 print("Points per segment:")
                 print(format_segment_sampling(labels, segment_lengths, segment_counts))
         except Exception as exc:
+            self.state = {}
             html_status(self.status, "err", f"<b>Validation failed:</b> {type(exc).__name__}: {exc}")
             with self.details:
                 print(f"Validation failed: {type(exc).__name__}: {exc}")
@@ -758,7 +838,8 @@ class SubmissionWidget(ipw.VBox):
             self.validate()
             if not self.state:
                 raise RuntimeError("QE calculation was not loaded; click Load QE calculation first.")
-            template = self.state["template"]
+            template = self._template_calculation()
+            reference_spin = self._chosen_reference_spin(template)
             matrix = np.array(self.state["matrix"], dtype=int)
             labels = list(self.state["labels"])
             coords = [list(c) for c in self.state["coords"]]
@@ -772,6 +853,8 @@ class SubmissionWidget(ipw.VBox):
             builder.pw_code = _load_code_from_widget(self.pw_code)
             builder.banduppy_code = _load_code_from_widget(self.banduppy_code)
             builder.run_reference_bands = orm.Bool(bool(self.run_reference.value))
+            if reference_spin is not None:
+                builder.reference_spin_parameters = orm.Dict(dict=reference_spin)
             builder.structure = template.inputs.structure
             builder.parameters = template.inputs.parameters
             builder.pseudos = dict(template.inputs.pseudos)
@@ -1225,9 +1308,11 @@ def _plot_unfolded_banduppy_density(
 
     before = len(ax.collections)
     plotter = banduppy.Plotting(save_figure_dir=str(RESULTS_DIR))
+    kline = np.asarray(kline, dtype=float)
+    unfolded_kpoints = np.column_stack((np.arange(len(kline)), kline))
     with contextlib.redirect_stdout(io.StringIO()):
         plotter.plot_ebs(
-            kpath_in_angs=np.asarray(kline, dtype=float),
+            unfolded_kpoints=unfolded_kpoints,
             unfolded_bandstructure=unfolded,
             fig=ax.figure,
             ax=ax,
