@@ -3,9 +3,11 @@ from __future__ import annotations
 import ast
 from html import escape
 import json
+import os
 import pickle
 import re
 from pathlib import Path
+from urllib.parse import quote
 
 import aiidalab_widgets_base as awb
 import aiidalab_widgets_empa as awe
@@ -979,9 +981,9 @@ class ViewerWidget(ipw.VBox):
         self.figure_width = ipw.FloatText(value=8.8, description="width [in]", layout=ipw.Layout(width="150px"))
         self.figure_height = ipw.FloatText(value=5.4, description="height [in]", layout=ipw.Layout(width="150px"))
         self.export_dpi = ipw.IntText(value=600, description="export dpi", layout=ipw.Layout(width="160px"))
-        self.retrieved = None
-        self.node = None
+        self._node_uuid = None
         self.loaded = None
+        self.pk.observe(self._invalidate_source, names="value")
         self.load_button.on_click(self.load)
         self.plot_button.on_click(self.plot)
         super().__init__([
@@ -1008,22 +1010,25 @@ class ViewerWidget(ipw.VBox):
         if autoload and self.pk.value:
             self.load()
 
+    def _invalidate_source(self, _=None):
+        self._node_uuid = None
+        self.loaded = None
+        self.plot_button.disabled = True
+
     def load(self, _=None):
         self.details.clear_output()
         self.plot_output.clear_output(wait=True)
-        self.plot_button.disabled = True
-        self.loaded = None
+        self._invalidate_source()
         try:
             pk = int(self.pk.value)
             node = orm.load_node(pk)
             if not getattr(node, "is_finished_ok", False):
                 raise RuntimeError(f"Node is not finished ok: {getattr(node, 'process_state', None)}")
             retrieved = self._get_banduppy_retrieved(node)
-            with retrieved.open("unfolding_bands.npz", "rb") as handle:
-                npz = np.load(handle)
-                self.loaded = {key: npz[key] for key in npz.files}
-            self.node = node
-            self.retrieved = retrieved
+            with retrieved.base.repository.open("unfolding_bands.npz", "rb") as handle:
+                with np.load(handle) as npz:
+                    self.loaded = {key: npz[key] for key in npz.files}
+            self._node_uuid = node.uuid
             channels = _loaded_spin_channels(self.loaded)
             if channels == ["none"]:
                 self.spin_channel.options = [("default", "none")]
@@ -1073,13 +1078,15 @@ class ViewerWidget(ipw.VBox):
 
     def plot(self, _=None):
         self.plot_output.clear_output(wait=True)
+        fig = None
         try:
             if self.loaded is None:
                 self.load()
             if self.loaded is None:
                 raise RuntimeError("No unfolding data is loaded. Load a finished WorkChain PK first.")
+            node = orm.load_node(self._node_uuid)
             data = self.loaded
-            kline = _plot_kline(data, self.node)
+            kline = _plot_kline(data, node)
             selected_channels = _selected_spin_channels(data, self.spin_channel.value)
             special_labels = json.loads(str(data.get("special_labels", "{}")))
             special_labels = _deduplicate_special_labels(
@@ -1087,12 +1094,16 @@ class ViewerWidget(ipw.VBox):
             )
             fermi = data.get("fermi_energy", np.nan)
             fermi = None if np.isnan(float(fermi)) else float(fermi)
-            workdir = RESULTS_DIR / f"qe_unfolding_view_{self.node.pk}"
+            workdir = RESULTS_DIR / f"qe_unfolding_view_{node.pk}"
             workdir.mkdir(parents=True, exist_ok=True)
 
             figure_width = max(2.0, float(self.figure_width.value))
             figure_height = max(2.0, float(self.figure_height.value))
             export_dpi = max(150, int(self.export_dpi.value))
+            if not np.isfinite([self.figure_width.value, self.figure_height.value]).all():
+                raise ValueError("Figure dimensions must be finite.")
+            if not np.isfinite([self.energy_min.value, self.energy_max.value]).all() or self.energy_max.value <= self.energy_min.value:
+                raise ValueError("Use finite energies with E max greater than E min.")
             fig, ax = plt.subplots(figsize=(figure_width, figure_height), dpi=140)
             overlay_text = "none"
             color_by_channel = {"none": "#d7191c", "up": "#d7191c", "dw": "#2c7bb6"}
@@ -1133,7 +1144,7 @@ class ViewerWidget(ipw.VBox):
                 )
                 overlay_text = "BandUPpy supercell dots"
             elif self.qe_overlay.value == "reference":
-                reference_info = _reference_bands_overlay(self.reference_bands_pk.value, self.node)
+                reference_info = _reference_bands_overlay(self.reference_bands_pk.value, node)
                 reference_shift = float(self.reference_energy_shift.value)
                 _plot_bandsdata_lines(
                     ax,
@@ -1232,7 +1243,6 @@ class ViewerWidget(ipw.VBox):
             with self.plot_output:
                 display(fig)
                 display(ipw.HTML(download_links))
-            plt.close(fig)
             html_status(
                 self.status,
                 "ok",
@@ -1240,7 +1250,7 @@ class ViewerWidget(ipw.VBox):
                 f"<code>{outfile}</code> and publication SVG: <code>{svg_outfile}</code>",
             )
             with self.details:
-                print("Plotted retrieved unfolding data from PK:", self.node.pk)
+                print("Plotted retrieved unfolding data from PK:", node.pk)
                 print("Spin channel:", self.spin_channel.value)
                 print("Unfolding plot style:", self.unfolding_plot_style.value)
                 print("Figure size [in]:", figure_width, figure_height)
@@ -1256,6 +1266,9 @@ class ViewerWidget(ipw.VBox):
             html_status(self.status, "err", f"<b>Plot failed:</b> {type(exc).__name__}: {exc}")
             with self.details:
                 raise
+        finally:
+            if fig is not None:
+                plt.close(fig)
 
 
 def _viewer_download_links(items):
@@ -1263,7 +1276,8 @@ def _viewer_download_links(items):
     for label, path in items:
         try:
             relative_path = path.relative_to(APP_ROOT).as_posix()
-            href = f"/files/apps/{APP_ROOT.name}/{relative_path}"
+            base_url = os.environ.get("JUPYTERHUB_SERVICE_PREFIX", "/").rstrip("/")
+            href = f"{base_url}/files/apps/{quote(APP_ROOT.name)}/{quote(relative_path, safe='/')}"
         except ValueError:
             href = path.as_posix()
         links.append(
