@@ -18,3 +18,8 @@ This is intentionally a notebook-style app, not yet a high-level `aiidalab-qe` p
 - a completed local QE bands calculation with its parent charge density, or a completed SCF template with `output_band` and its retained density/wavefunctions. An SCF-only template qualifies only the stored occupied/eigenvalue range, not missing conduction bands.
 
 The submission notebook launches the provenance-tracked unfolding workflow from `aiida-nanotech-empa`. The viewer loads its completed outputs and performs only plotting and lightweight result inspection.
+
+## Manual GUI qualification
+
+See [the bounded local guide](docs/testing/localhost.md), including its eight-atom
+XYZ SCF-template route and explicit limits on conduction/duplicate coverage.
