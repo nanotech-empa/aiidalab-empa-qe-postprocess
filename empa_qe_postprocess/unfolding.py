@@ -332,6 +332,16 @@ def load_root_and_candidates(pk):
     return root, candidates
 
 
+def template_parent_folder(template_calc):
+    """Use the existing charge source, or the completed SCF template itself."""
+    if "parent_folder" in template_calc.inputs:
+        return template_calc.inputs.parent_folder
+    calculation = template_calc.inputs.parameters.get_dict().get("CONTROL", {}).get("calculation", "").lower()
+    if calculation == "scf":
+        return template_calc.outputs.remote_folder
+    raise ValueError("This template has no parent charge-density folder. Use a completed SCF template or bands with its parent folder.")
+
+
 def clone_pw_inputs_for_unfolding(template_calc, kpoints_node):
     builder = PwCalculation.get_builder()
     builder.code = template_calc.inputs.code
@@ -342,8 +352,7 @@ def clone_pw_inputs_for_unfolding(template_calc, kpoints_node):
     params.setdefault("CONTROL", {})
     params["CONTROL"]["calculation"] = "bands"
     builder.parameters = orm.Dict(dict=params)
-    if "parent_folder" in template_calc.inputs:
-        builder.parent_folder = template_calc.inputs.parent_folder
+    builder.parent_folder = template_parent_folder(template_calc)
     for optional in ("settings", "parallelization", "hubbard_file", "vdw_table"):
         if optional in template_calc.inputs:
             setattr(builder, optional, getattr(template_calc.inputs, optional))
@@ -759,6 +768,7 @@ class SubmissionWidget(ipw.VBox):
             if self.template.value is None:
                 self.template.value = 0
             selected = candidates[self.template.value][2]
+            template_parent_folder(selected)
             self.state["template_uuid"] = selected.uuid
             if previous_template != selected.uuid:
                 self.reference_spin.value = None
@@ -860,8 +870,7 @@ class SubmissionWidget(ipw.VBox):
             builder.structure = template.inputs.structure
             builder.parameters = template.inputs.parameters
             builder.pseudos = dict(template.inputs.pseudos)
-            if "parent_folder" in template.inputs:
-                builder.parent_folder = template.inputs.parent_folder
+            builder.parent_folder = template_parent_folder(template)
             builder.template_remote_folder = template.outputs.remote_folder
             builder.template_metadata = orm.Dict(dict={
                 "root_pk": self.state.get("root_pk"),
