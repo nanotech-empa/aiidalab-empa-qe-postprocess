@@ -19,6 +19,12 @@ This is intentionally a notebook-style app, not yet a high-level `aiidalab-qe` p
 
 The submission notebook launches the provenance-tracked unfolding workflow from `aiida-nanotech-empa`. The viewer loads its completed outputs and performs only plotting and lightweight result inspection.
 
+## Plotting help
+
+See the [unfolded-band plotting guide](docs/unfolded-band-plotting.md) for
+path/state coverage, spectral styles, reference alignment and export. The viewer
+also includes a collapsible **Plotting guide**.
+
 ## Manual GUI qualification
 
 See [the bounded local guide](docs/testing/localhost.md), including its eight-atom
