@@ -1025,10 +1025,11 @@ class ViewerWidget(ipw.VBox):
         self._node_uuid = None
         self.loaded = None
         self.plot_button.disabled = True
+        self.plot_output.clear_output(wait=False)
+        self.details.clear_output(wait=False)
+        self.status.value = ""
 
     def load(self, _=None):
-        self.details.clear_output()
-        self.plot_output.clear_output(wait=True)
         self._invalidate_source()
         try:
             pk = int(self.pk.value)
@@ -1088,7 +1089,7 @@ class ViewerWidget(ipw.VBox):
         raise RuntimeError(f"Unsupported node type for this viewer: {label or node.__class__.__name__}")
 
     def plot(self, _=None):
-        self.plot_output.clear_output(wait=True)
+        self.plot_output.clear_output(wait=False)
         fig = None
         try:
             if self.loaded is None:
