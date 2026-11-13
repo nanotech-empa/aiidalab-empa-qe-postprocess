@@ -176,6 +176,11 @@ actual durable UUID/direct reopening route, not an invented UUID filter.
    controls, then restore. Density broadening is display, not lifetime data.
 2. Overlay reference primitive lines from this run's own reference. Start ref
    shift 0 and audit each EF convention as in B03. No extra calculation occurs.
+   Stored BandUPpy energies are already E−EF; require all three plot styles and
+   supercell dots to use that zero exactly once. Change **ref shift** positively
+   and negatively, check that only the primitive reference moves by that amount,
+   then restore 0. This manual offset remains available for charged/neutral
+   comparisons; it must not compensate for an automatic duplicate EF subtraction.
 3. Download actual PNG and SVG. Check editable SVG text/axes, raster density at
    chosen export dpi, labels, dimensions and data identity against raw arrays.
    Preserve raw NPZ independently; do not claim a nonexistent raw-data GUI export.

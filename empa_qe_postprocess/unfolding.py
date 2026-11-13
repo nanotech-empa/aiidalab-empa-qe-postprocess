@@ -1123,7 +1123,7 @@ class ViewerWidget(ipw.VBox):
             plot_summaries = []
             if self.unfolding_plot_style.value == "density":
                 for channel in selected_channels:
-                    unfolded_raw = _unfolded_bandstructure_for_channel(data, channel)
+                    unfolded_raw = _absolute_unfolded_bandstructure_for_channel(data, channel)
                     unfolded = _remap_unfolded_bandstructure_kline(unfolded_raw, kline)
                     summary = _plot_unfolded_banduppy_density(
                         ax,
@@ -1173,7 +1173,7 @@ class ViewerWidget(ipw.VBox):
                 overlay_text = f"primitive reference bands PK {reference_info['pk']} (own EF, shift {reference_shift:+.3f} eV)"
             if self.unfolding_plot_style.value != "density":
                 for channel in selected_channels:
-                    unfolded_raw = _unfolded_bandstructure_for_channel(data, channel)
+                    unfolded_raw = _absolute_unfolded_bandstructure_for_channel(data, channel)
                     unfolded = _remap_unfolded_bandstructure_kline(unfolded_raw, kline)
                     if self.unfolding_plot_style.value == "lines":
                         summary = _plot_unfolded_smoothed_density(
@@ -1464,6 +1464,20 @@ def _unfolded_bandstructure_for_channel(data, channel):
     if channel == "none" and "unfolded_bandstructure_none" in data:
         return data["unfolded_bandstructure_none"]
     return data["unfolded_bandstructure"]
+
+
+def _absolute_unfolded_bandstructure_for_channel(data, channel):
+    """Adapt stored E-EF to the absolute energies expected by plotting helpers.
+
+    BandUPpy passes EF to irrep, which subtracts it when reading QE energies.
+    Restore it only in a copy so plotters can apply their common energy zero
+    once, independently of the optional rigid shift of the primitive reference.
+    """
+    unfolded = np.array(_unfolded_bandstructure_for_channel(data, channel), dtype=float, copy=True)
+    fermi = float(data.get("fermi_energy", np.nan))
+    if np.isfinite(fermi) and unfolded.size:
+        unfolded[:, 2] += fermi
+    return unfolded
 
 
 def _plot_kline(data, node=None):
@@ -1915,7 +1929,7 @@ def _plot_unfolded_supercell_dots(ax, data, *, kline, fermi, energy_min, energy_
     label_used = False
     for channel in channels:
         unfolded = _remap_unfolded_bandstructure_kline(
-            _unfolded_bandstructure_for_channel(data, channel), kline
+            _absolute_unfolded_bandstructure_for_channel(data, channel), kline
         )
         energies = unfolded[:, 2] - fermi
         mask = (energies >= energy_min) & (energies <= energy_max)
