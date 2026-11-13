@@ -153,6 +153,18 @@ Use **Refresh** on this exact workflow; no second submission to monitor it.
    reference agreement. Missing conduction states leave those branches explicitly
    unvalidated. A CP2K unfolding result cannot substitute for this QE evidence.
 
+If the three QE stages succeeded but the unfolding reader failed, preserve the
+failed workflow and all successful remote folders. After a reviewed reader-only
+correction and source/runtime preflight, the existing GUI recovery route can use
+the completed folded `PwCalculation` as the template with **Run pristine primitive
+reference bands** OFF. It submits folded bands followed by BandUPpy, with no SCF
+or repeated primitive reference. Keep the same S/path/band selection and explicit
+resources. Record this as a new recovery workflow; do not relabel the failed run.
+In the viewer, select **reference primitive lines** and the earlier primitive
+reference BandsData in **ref bands PK**. Audit that it is the same Hamiltonian,
+cell/path/spin recipe and common energy zero. This route needs its own actual
+GUI/native evidence; a reader unit test does not qualify the recovered spectrum.
+
 ## B04 — Search, viewer, export, stale state and reopening
 
 No native jobs. Search post-processing → Search → View this workflow, or use
