@@ -15,7 +15,7 @@ import ipywidgets as ipw
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap, PowerNorm
 import numpy as np
-from IPython.display import display
+from IPython.display import HTML, display
 from aiida import orm
 from aiida.common.links import LinkType
 from aiida.engine import submit
@@ -509,7 +509,7 @@ def reference_preview_text(calc, matrix, tolerance, *, spin_settings=None, run_r
 class SubmissionWidget(ipw.VBox):
     def __init__(self):
         self.status = ipw.HTML()
-        self.details = ipw.Output(layout=ipw.Layout(border="1px solid #ddd", padding="8px", max_height="260px", overflow="auto"))
+        self.details = ipw.Output(layout=ipw.Layout(border="1px solid #ddd", padding="8px"))
         self.plot_output = ipw.Output(layout=ipw.Layout(width="100%"))
         self.details_box = ipw.Accordion(children=[self.details], selected_index=None, layout=ipw.Layout(width="920px"))
         self.details_box.set_title(0, "Details")
@@ -955,7 +955,7 @@ class ViewerWidget(ipw.VBox):
         self.load_button = ipw.Button(description="Load", icon="search", layout=ipw.Layout(width="100px"))
         self.plot_button = ipw.Button(description="Plot bands", button_style="success", icon="line-chart", disabled=True, layout=ipw.Layout(width="140px"))
         self.status = ipw.HTML()
-        self.details = ipw.Output(layout=ipw.Layout(border="1px solid #ddd", padding="8px", max_height="260px", overflow="auto"))
+        self.details = ipw.Output(layout=ipw.Layout(border="1px solid #ddd", padding="8px"))
         self.plot_output = ipw.Output(layout=ipw.Layout(width="100%"))
         self.details_box = ipw.Accordion(children=[self.details], selected_index=None, layout=ipw.Layout(width="920px"))
         self.details_box.set_title(0, "Details")
@@ -1969,19 +1969,30 @@ def _viewer_has_retrieved_unfolding(pk):
         return False
 
 
-def display_submission_widget():
-    widget = SubmissionWidget()
+def _display_in_page_flow(widget):
+    # Appmode otherwise scrolls a long widget inside a fixed-height cell output.
+    # Restrict this to output wrappers; input controls keep their own scrolling.
+    display(HTML("""
+<style>
+#notebook .output_scroll {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    box-shadow: none !important;
+}
+</style>
+"""))
     display(widget)
     return widget
+
+
+def display_submission_widget():
+    return _display_in_page_flow(SubmissionWidget())
 
 
 def display_viewer_widget(pk=None, *, autoload=False):
-    widget = ViewerWidget(pk=pk, autoload=autoload)
-    display(widget)
-    return widget
+    return _display_in_page_flow(ViewerWidget(pk=pk, autoload=autoload))
 
 
 def display_search_widget():
-    widget = SearchWidget()
-    display(widget)
-    return widget
+    return _display_in_page_flow(SearchWidget())
