@@ -992,6 +992,34 @@ class ViewerWidget(ipw.VBox):
         self.figure_width = ipw.FloatText(value=8.8, description="width [in]", layout=ipw.Layout(width="150px"))
         self.figure_height = ipw.FloatText(value=5.4, description="height [in]", layout=ipw.Layout(width="150px"))
         self.export_dpi = ipw.IntText(value=600, description="export dpi", layout=ipw.Layout(width="160px"))
+        self.plot_help = ipw.Accordion(
+            children=[ipw.HTML(
+                "<ol>"
+                "<li><b>Start with fat dots.</b> Load a completed workflow, choose an energy "
+                "window covering its calculated bands, then click Plot bands. Dot size "
+                "represents unfolding weight; threshold hides weaker contributions.</li>"
+                "<li><b>Check the calculated path and states.</b> A few k-points only sample "
+                "a short path. Empty conduction bands must have been computed in QE; "
+                "a wider plot window cannot create them.</li>"
+                "<li><b>Use smoothing for presentation.</b> Smear is an energy broadening "
+                "in eV. Bins and contrast change the density display. Broad patches from "
+                "sparse samples do not establish a resolved band dispersion; compare "
+                "with fat dots before interpreting them.</li>"
+                "<li><b>Align a reference deliberately.</b> Energies use the displayed "
+                "E &minus; E<sub>F</sub> zero. Choose reference primitive lines and its "
+                "bands PK to compare a reference. Ref shift adds a rigid offset in eV "
+                "to those reference lines only, for example for a neutral/charged "
+                "comparison. It leaves unfolded data and their weights unchanged.</li>"
+                "<li><b>Replot and export.</b> Click Plot bands after editing controls. "
+                "Use the resulting PNG/SVG links; loading another workflow clears "
+                "the previous plot and live download links.</li>"
+                "</ol>"
+            )], selected_index=None, layout=ipw.Layout(width="100%"),
+        )
+        self.plot_help.set_title(0, "Plotting guide")
+        self.reference_energy_shift.tooltip = "Rigid eV shift of the reference primitive lines only."
+        self.density_smear.tooltip = "Energy broadening in eV for the spectral-density styles."
+        self.threshold.tooltip = "Weight cutoff for fat dots and BandUPpy density."
         self._node_uuid = None
         self.loaded = None
         self.pk.observe(self._invalidate_source, names="value")
@@ -1014,6 +1042,7 @@ class ViewerWidget(ipw.VBox):
                 self.export_dpi,
                 ipw.HTML("<span style='line-height:32px;'>SVG keeps text and axes as vector; density maps are embedded at export dpi.</span>"),
             ]),
+            self.plot_help,
             self.status,
             self.details_box,
             self.plot_output,
