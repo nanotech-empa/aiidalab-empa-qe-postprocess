@@ -86,6 +86,57 @@ def test_changing_source_invalidates_the_loaded_arrays(viewer):
     assert widget.plot_button.disabled
 
 
+@pytest.mark.parametrize("action", ["change", "reload", "invalid_load"])
+def test_source_transition_requests_immediate_frontend_output_clear(viewer, monkeypatch, action):
+    """A cleared Python identity must not leave another source's live downloads."""
+    widget, _, root = viewer
+    calls = {"plot": [], "details": []}
+    for name, output in [("plot", widget.plot_output), ("details", widget.details)]:
+        monkeypatch.setattr(
+            output, "clear_output",
+            lambda *args, _name=name, **kwargs: calls[_name].append(kwargs.get("wait", False)),
+        )
+    widget.status.value = "Saved previous-source plot and download links"
+    widget.reference_energy_shift.value = 0.6
+    archive = root / "previous-export.svg"
+    archive.write_text("previous scientific export")
+
+    if action == "change":
+        widget.pk.value += 1000
+        assert widget.status.value == ""
+        assert widget.loaded is None and widget._node_uuid is None
+        assert widget.plot_button.disabled
+    elif action == "reload":
+        widget.load()
+        assert "Loaded unfolding output" in widget.status.value
+        assert widget.loaded is not None
+    else:
+        widget.pk.value = 0
+        widget.load()
+        assert "Load failed" in widget.status.value
+        assert widget.loaded is None and widget.plot_button.disabled
+    for requests in calls.values():
+        # wait=True leaves stale DOM visible until a replacement display arrives.
+        assert requests and not any(requests)
+    assert "Saved previous-source" not in widget.status.value
+    assert widget.reference_energy_shift.value == 0.6
+    assert archive.read_text() == "previous scientific export"
+
+
+def test_failed_plot_requests_immediate_frontend_output_clear(viewer, monkeypatch):
+    widget, _, _ = viewer
+    waits = []
+    monkeypatch.setattr(
+        widget.plot_output, "clear_output",
+        lambda *args, **kwargs: waits.append(kwargs.get("wait", False)),
+    )
+    widget.energy_max.value = widget.energy_min.value
+    with pytest.raises(ValueError, match="E max greater"):
+        widget.plot()
+    assert waits == [False]
+    assert not plt.get_fignums()
+
+
 def test_failed_plot_does_not_leave_a_figure_allocated(viewer):
     widget, _, _ = viewer
     widget.energy_max.value = widget.energy_min.value
