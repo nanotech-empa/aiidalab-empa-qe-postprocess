@@ -101,3 +101,38 @@ def test_actual_widget_revalidates_and_passes_scf_parent_to_real_workflow_builde
         assert widget.state == {} and len(submissions) == 1
     finally:
         close(widget)
+
+
+@pytest.mark.parametrize("spacing", [0, -0.4])
+def test_invalid_spacing_after_valid_load_cannot_submit(source, monkeypatch, spacing):
+    """An edited draft must not turn nonpositive spacing into millions of points."""
+    monkeypatch.setattr(unfolding, "_widgets_base_code_selector", lambda *a, **k: ipw.Text())
+    submissions = []
+    monkeypatch.setattr(unfolding, "submit", lambda builder: submissions.append(builder))
+    widget = unfolding.SubmissionWidget()
+    try:
+        calc = orm.load_node(source[0])
+        before = calc.inputs.parameters.get_dict()
+        widget.pk.value = calc.pk
+        widget.matrix.value = "[[1,0,0],[0,1,0],[0,0,1]]"
+        widget.points_source.value = "hex2d"
+        widget.path.value = "G M"
+        widget.kpoint_spacing.value = 0.4
+        widget.validate()
+        assert widget.state["template_uuid"] == calc.uuid
+
+        widget.kpoint_spacing.value = spacing
+        assert "finite and strictly positive" in widget.segment_counts.value
+        with pytest.raises(RuntimeError, match="was not loaded"):
+            widget.prepare()
+        assert widget.state == {}
+        assert submissions == []
+        assert calc.inputs.parameters.get_dict() == before
+
+        widget.kpoint_spacing.value = 0.4
+        widget.validate()
+        assert widget.state["template_uuid"] == calc.uuid
+        assert widget.state["segment_counts"] == [5]
+        assert submissions == []
+    finally:
+        close(widget)

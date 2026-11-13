@@ -120,6 +120,10 @@ Needs B00, admitted resources and the user's test start. One SCF job maximum.
    Require clear rejection and no stale accepted state. Current submit rereads
    the visible form; unit tests alone do not supply this GUI PASS. Restore and
    validate the valid final form before any scientific submission.
+   After loading a valid draft, change spacing to zero and test **Submit workflow**:
+   require the finite-positive-spacing diagnostic and no new workflow, then
+   restore 0.4 and load again. Invalid spacing must never become a tiny default
+   spacing or an enormous point count.
 5. The equivalent explicit primitive-lattice representation may be compared as
    a draft-only mapping check. Restore the chosen representation afterward.
 

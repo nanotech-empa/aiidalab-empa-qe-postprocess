@@ -8,6 +8,20 @@ from empa_qe_postprocess.unfolding import _plot_unfolded_banduppy_density
 pytest_plugins = ["aiida.tools.pytest_fixtures"]
 
 
+@pytest.mark.parametrize("spacing", [0, -0.4, np.nan, np.inf, -np.inf])
+def test_nonfinite_or_nonpositive_kpoint_spacing_is_rejected(spacing):
+    from empa_qe_postprocess.unfolding import points_from_spacing
+
+    with pytest.raises(ValueError, match="finite and strictly positive"):
+        points_from_spacing([1.451039491], spacing)
+
+
+def test_valid_kpoint_spacing_keeps_existing_segment_sampling():
+    from empa_qe_postprocess.unfolding import points_from_spacing
+
+    assert points_from_spacing([1.451039491, 0.0], 0.4) == [5, 2]
+
+
 def test_plot_unfolded_density_with_banduppy_1():
     """Test the released BandUPpy 1 plotting API."""
     unfolded = np.asarray(
