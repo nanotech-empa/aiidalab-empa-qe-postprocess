@@ -290,7 +290,9 @@ def primitive_segment_lengths(structure, supercell_matrix, path_coords):
 
 
 def points_from_spacing(segment_lengths, spacing):
-    spacing = max(float(spacing), 1e-8)
+    spacing = float(spacing)
+    if not np.isfinite(spacing) or spacing <= 0:
+        raise ValueError("K-point spacing must be finite and strictly positive.")
     return [max(2, int(np.ceil(length / spacing)) + 1) for length in segment_lengths]
 
 
