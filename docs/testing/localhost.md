@@ -64,6 +64,10 @@ DOC01 below applies to all cases.
    installation or native API qualification. Missing code/app is BLOCKED.
 4. Opening, selecting, loading or plotting must submit nothing. Record layout,
    scrolling and help findings without redesigning the established interface.
+5. Scroll the complete submission form from the template/code resources to the
+   path and Details, then back. Forms, diagnostic output and result plots must
+   expand in the normal page flow, using the page scrollbar. Input text editors
+   retain their own scrolling. Confirm resource selections survive page scrolling.
 
 ## B01 — Eight-atom template through the main QE GUI
 
