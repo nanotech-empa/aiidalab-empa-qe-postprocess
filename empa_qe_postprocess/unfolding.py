@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+from copy import deepcopy
 from html import escape
 import json
 import os
@@ -235,9 +236,46 @@ def estimate_qe_band_window(calc, energy_min, energy_max, margin=2):
     }
 
 
+def qe_band_request(calc, energy_min, energy_max, margin, *, computed_bands=0, selection="energy"):
+    """Separate the QE calculation size from selecting already stored energies."""
+    if isinstance(computed_bands, bool) or not isinstance(computed_bands, (int, np.integer)) or computed_bands < 0:
+        raise ValueError("QE bands must be a nonnegative integer (0 inherits the template).")
+    if selection not in ("energy", "all"):
+        raise ValueError("Choose the template energy window or all computed bands.")
+    parameters = deepcopy(calc.inputs.parameters.get_dict())
+    outputs = outgoing_outputs(calc)
+    if "output_band" not in outputs:
+        raise RuntimeError("The template has no stored QE band data.")
+    stored_count = int(np.asarray(outputs["output_band"].get_bands()).shape[-1])
+    count = int(computed_bands or stored_count)
+    if computed_bands:
+        parameters.setdefault("SYSTEM", {})["nbnd"] = int(computed_bands)
+    if selection == "energy":
+        if count != stored_count:
+            raise ValueError(
+                "Newly requested bands have no stored energies. Select All computed bands "
+                "to include them; the template energy window cannot estimate them."
+            )
+        return parameters, estimate_qe_band_window(calc, energy_min, energy_max, margin)
+    output_parameters = outputs.get("output_parameters")
+    stored = output_parameters.get_dict() if output_parameters is not None else {}
+    return parameters, {
+        "ib_start": 0, "ib_end": count, "first_band": 1, "last_band": count,
+        "selected_bands": count, "total_bands": count,
+        "fermi_energy": float(stored.get("fermi_energy", 0.0)),
+        "energy_min": float(energy_min), "energy_max": float(energy_max),
+        "margin": 0, "selection": "all",
+    }
+
+
 def format_band_window(window):
     if window is None:
         return "No band window selected."
+    if window.get("selection") == "all":
+        return (
+            f"All computed QE bands 1-{window['total_bands']} are passed to BandUPpy.\n"
+            "No template-energy filter is applied. Select the plot window after completion."
+        )
     return (
         f"Bands {window['first_band']}-{window['last_band']} "
         f"({window['selected_bands']} of {window['total_bands']})\n"
@@ -555,6 +593,8 @@ class SubmissionWidget(ipw.VBox):
             layout=ipw.Layout(width="260px"),
         )
         self.kpoint_batch_size = ipw.BoundedIntText(value=1, min=1, description="k/batch", layout=ipw.Layout(width="190px"))
+        self.computed_bands = ipw.IntText(value=0, description="QE bands", layout=ipw.Layout(width="210px"))
+        self.band_selection = ipw.Dropdown(options=[("Template energy window", "energy"), ("All computed bands", "all")], value="energy", description="Unfold", layout=ipw.Layout(width="360px"))
         self.band_energy_min = ipw.FloatText(value=-6.0, description="band E min", layout=ipw.Layout(width="180px"))
         self.band_energy_max = ipw.FloatText(value=6.0, description="band E max", layout=ipw.Layout(width="180px"))
         self.band_margin = ipw.BoundedIntText(value=2, min=0, description="margin", layout=ipw.Layout(width="150px"))
@@ -579,7 +619,7 @@ class SubmissionWidget(ipw.VBox):
             widget.observe(self._update_segment_counts, names="value")
         for widget in (self.matrix, self.primitive, self.mode, self.primitive_atom_tolerance):
             widget.observe(self._update_reference_preview, names="value")
-        for widget in (self.band_energy_min, self.band_energy_max, self.band_margin):
+        for widget in (self.band_energy_min, self.band_energy_max, self.band_margin, self.computed_bands, self.band_selection):
             widget.observe(self._update_band_window, names="value")
         self.validate_button.on_click(self.validate)
         self.prepare_button.on_click(self.prepare)
@@ -596,6 +636,8 @@ class SubmissionWidget(ipw.VBox):
             self.banduppy_code,
             self.banduppy_resources,
             ipw.HBox([self.folded_diagonalization, self.kpoint_batch_size, ipw.HTML("<span style='line-height:32px;'>BandUPpy folded k-points loaded per batch</span>")]),
+            ipw.HBox([self.computed_bands, self.band_selection]),
+            ipw.HTML("QE bands: 0 inherits the template; a positive value sets QE nbnd. Include all occupied states and enough empty states for the desired range. For new bands select All computed bands: a plot or template-energy window cannot create conduction states."),
             ipw.HBox([self.band_energy_min, self.band_energy_max, self.band_margin, ipw.HTML("<span style='line-height:32px;'>Band window relative to EF</span>")]),
             self.band_window,
             ipw.HTML("<b>Reference cell</b>"),
@@ -744,17 +786,21 @@ class SubmissionWidget(ipw.VBox):
         except Exception as exc:
             self.reference_preview.value = f"Cannot preview primitive reference yet: {type(exc).__name__}: {exc}"
 
+    def _band_request(self, template):
+        return qe_band_request(
+            template, self.band_energy_min.value, self.band_energy_max.value,
+            self.band_margin.value, computed_bands=self.computed_bands.value,
+            selection=self.band_selection.value,
+        )
+
     def _update_band_window(self, *_):
+        for widget in (self.band_energy_min, self.band_energy_max, self.band_margin):
+            widget.disabled = self.band_selection.value == "all"
         template = self._template_calculation()
         if template is None:
             return
         try:
-            window = estimate_qe_band_window(
-                template,
-                self.band_energy_min.value,
-                self.band_energy_max.value,
-                self.band_margin.value,
-            )
+            _, window = self._band_request(template)
             self.state["band_window"] = window
             self.band_window.value = format_band_window(window)
         except Exception as exc:
@@ -792,12 +838,7 @@ class SubmissionWidget(ipw.VBox):
                 run_reference=self.run_reference.value,
             )
             self.reference_preview.value = reference_preview
-            band_window = estimate_qe_band_window(
-                selected,
-                self.band_energy_min.value,
-                self.band_energy_max.value,
-                self.band_margin.value,
-            )
+            _, band_window = self._band_request(selected)
             self.band_window.value = format_band_window(band_window)
             self.state = {
                 "root_pk": root.pk,
@@ -835,6 +876,7 @@ class SubmissionWidget(ipw.VBox):
                 print(reference_preview)
                 print(f"Target k-point spacing: {float(self.kpoint_spacing.value):.4g} 1/Ang")
                 print(f"BandUPpy k-point batch size: {int(self.kpoint_batch_size.value)}")
+                print("QE computed bands:", self.computed_bands.value or "inherit template")
                 print("Band window:", format_band_window(band_window))
                 print("Points per segment:")
                 print(format_segment_sampling(labels, segment_lengths, segment_counts))
@@ -870,7 +912,8 @@ class SubmissionWidget(ipw.VBox):
             if reference_spin is not None:
                 builder.reference_spin_parameters = orm.Dict(dict=reference_spin)
             builder.structure = template.inputs.structure
-            builder.parameters = template.inputs.parameters
+            parameters, band_window = self._band_request(template)
+            builder.parameters = orm.Dict(dict=parameters) if self.computed_bands.value else template.inputs.parameters
             builder.pseudos = dict(template.inputs.pseudos)
             builder.parent_folder = template_parent_folder(template)
             builder.template_remote_folder = template.outputs.remote_folder
@@ -896,10 +939,15 @@ class SubmissionWidget(ipw.VBox):
             unfolding_parameters.update({
                 "ib_start": int(band_window["ib_start"]),
                 "ib_end": int(band_window["ib_end"]),
-                "band_window_energy_min": float(band_window["energy_min"]),
-                "band_window_energy_max": float(band_window["energy_max"]),
-                "band_window_margin": int(band_window["margin"]),
             })
+            if band_window.get("selection") == "all":
+                unfolding_parameters["band_selection"] = "all"
+            else:
+                unfolding_parameters.update({
+                    "band_window_energy_min": float(band_window["energy_min"]),
+                    "band_window_energy_max": float(band_window["energy_max"]),
+                    "band_window_margin": int(band_window["margin"]),
+                })
             builder.unfolding_parameters = orm.Dict(dict=unfolding_parameters)
             if "settings" in template.inputs:
                 builder.settings = template.inputs.settings
@@ -924,6 +972,7 @@ class SubmissionWidget(ipw.VBox):
                 print("BandUPpy k-point batch size:", max(1, int(self.kpoint_batch_size.value)))
                 print("Run primitive reference bands:", bool(self.run_reference.value))
                 print("Primitive atom clustering tolerance:", float(self.primitive_atom_tolerance.value))
+                print("QE computed bands:", self.computed_bands.value or "inherit template")
                 print("Band window:", format_band_window(band_window))
                 print("Spin mode:", spin_settings["description"])
                 print("Path:", " - ".join(labels))
