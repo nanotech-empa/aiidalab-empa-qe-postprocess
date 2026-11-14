@@ -33,8 +33,11 @@ SCFs with output_band and uses their own retained density as the charge source.
 Existing bands templates retain their actual input parent. Other parentless
 calculation types are explicitly rejected. SCF-only templates contain the stored
 occupied/eigenvalue range; **conduction bands and a band gap are not qualified**
-without a separately supported GUI template containing those states. Do not
-invent an editable 20-band control absent from the main QE form.
+unless they are explicitly requested in the companion form. Its **QE bands**
+control sets the folded calculation's `nbnd` (0 preserves inheritance); select
+**Unfold → All computed bands** to include newly requested states. The main QE
+SCF form still has no invented editable band-count control. An inherited
+energy-window selection can only inspect energies already stored in its template.
 
 Keep one native job at a time. QE panels: one node, **2 MPI tasks/node × 1
 thread/task = 2 cores**, walltime600s. BandUPpy: one process/one thread, **k/batch
@@ -109,7 +112,10 @@ Needs B00, admitted resources and the user's test start. One SCF job maximum.
 2. Keep **Run pristine primitive reference bands** ON. Require the preview's
    two-atom BN primitive geometry, XYZ model and neutral nonmagnetic recipe.
    Atom tol 0.08 is a fractional clustering tolerance, not Å or an error bound.
-3. Select Davidson (robust), k/batch 1. Initially choose band E min/max −20,+10 eV
+3. For the original occupied-only smoke, retain **QE bands = 0** and
+   **Unfold → Template energy window**. For new empty states use B05 below;
+   increasing the plot window cannot add them.
+   Select Davidson (robust), k/batch 1. Initially choose band E min/max −20,+10 eV
    relative to the displayed EF, margin 2; inspect the inferred *stored* indices.
    Narrow only after identifying the occupied states. An energy window neither
    creates missing bands nor reduces inherited nbnd/cutoffs. Record whether EF
@@ -210,3 +216,48 @@ After each completed manual GUI case, record the verdict and reopen route, then
 close its Chrome AiiDAlab tabs. Keep active/unfinished/pending-user-review and
 unrelated tabs. Closing tabs must not cancel jobs or shared services. Preserve
 all failed/partial evidence and mark unsupported/unconfigured branches honestly.
+
+
+## B05 — Complete pristine hBN path with explicit empty bands
+
+Use this separately agreed continuation after the other cases, rather than
+relabeling the old five-point occupied-only smoke. Record its own source
+fingerprint and native/GUI evidence. The agreed tiny route uses QE7.5,
+B4N4/eight atoms with the same 5×5×15 Å XYZ cell, nonmagnetic neutral PBE and
+60/480 Ry cutoffs. One workflow at a time: each QE stage 4 MPI ×1 thread and
+1200s; the BandUPpy helper one process/one thread and1200s, k/batch1.
+The five serial native stages are new supercell SCF, primitive SCF, primitive
+bands, folded bands and unfolding. No automatic retry or larger allocation.
+These are functional band/unfolding checks, not a k-mesh/vacuum/cutoff
+convergence study or a high-accuracy prediction of the hBN gap.
+
+1. Through the main QE GUI prepare a fresh QE7.5 SCF-only template, retaining
+   eight atoms and workfiles. Inspect and record the actual SCF k-grid,
+   pseudopotential versions/hashes, valence count, cutoffs, settings and Code.
+   Preserve the earlier QE7.4 template; do not overwrite it or silently reuse
+   its native files with a different executable.
+2. Load that completed template in the companion form. Set S=diag(2,2,1),
+   hexagonal2D path **G K M G**, spacing0.1 Å^-1. The segment counts are
+   18/10/16 (42 points with shared joins), not the earlier G-M five-point path.
+3. Set **QE bands = 32**, **Unfold = All computed bands**, Davidson and k/batch1.
+   Require the preview to show all32 bands, without template-energy filtering.
+   The existing backend derives eight bands for the two-atom reference via
+   ceil(32/detS). With ordinary B3/N5 pseudos the supercell has16 occupied and
+   16 empty bands; verify actual native occupations instead of assuming this.
+4. Enable the pristine reference and inspect its two-atom neutral nonmagnetic
+   model, matching cell and actual k-grid relation. Set both QE panels and the
+   helper panel to the agreed budgets. Recheck all visible values and Submit
+   the workflow once after the SCF is complete. Native audits must prove
+   serial stages, source identity, nbnd32/reference8, all32 helper input bands,
+   convergence, finite weights/energies and no hidden work-directory cleanup.
+5. Open the result in the real browser. Require Γ/K/M/Γ labels, occupied and
+   empty dispersive branches and the hBN gap visible on a suitable energy
+   window. Compare the pristine primitive reference and unfolded peaks at
+   matching momenta using the existing0.02eV consistency criterion. Preserve
+   each native energy reference; manual **ref shift** remains an intentional
+   independent rigid shift, not an automatic physical alignment.
+6. Exercise dots, fatbands and spectral styles, threshold/smearing, reference
+   visibility and an explicit shift/restore. Download PNG and publication SVG,
+   verify plotted data against stored arrays, then reopen the saved workflow
+   in a fresh notebook. Retain any incomplete conduction/path coverage or
+   scientific limitation explicitly; a nonempty plot alone is not PASS.
