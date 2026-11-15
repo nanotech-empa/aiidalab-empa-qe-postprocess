@@ -1035,6 +1035,8 @@ class ViewerWidget(ipw.VBox):
             layout=ipw.Layout(width="280px"),
         )
         self.reference_bands_pk = ipw.IntText(value=0, description="ref bands PK", layout=ipw.Layout(width="250px"))
+        self.reference_bands_pk.tooltip = "Filled automatically when the workflow saved primitive reference bands; otherwise select a separate reference by PK."
+        self.reference_note = ipw.HTML()
         self.reference_energy_shift = ipw.FloatText(value=0.0, description="ref shift", layout=ipw.Layout(width="160px"))
         self.reference_linewidth = ipw.FloatText(value=1.6, description="ref lw", layout=ipw.Layout(width="140px"))
         self.show_legend = ipw.Checkbox(value=True, description="legend", indent=False, layout=ipw.Layout(width="110px"))
@@ -1055,8 +1057,11 @@ class ViewerWidget(ipw.VBox):
                 "sparse samples do not establish a resolved band dispersion; compare "
                 "with fat dots before interpreting them.</li>"
                 "<li><b>Align a reference deliberately.</b> Energies use the displayed "
-                "E &minus; E<sub>F</sub> zero. Choose reference primitive lines and its "
-                "bands PK to compare a reference. Ref shift adds a rigid offset in eV "
+                "E &minus; E<sub>F</sub> zero. A saved primitive reference fills ref bands PK "
+                "automatically. Otherwise choose a separate primitive bands PK, or enable "
+                "Run pristine primitive reference bands when submitting a new workflow. "
+                "Supercell template bands are not a primitive reference. Choose reference "
+                "primitive lines to display it. Ref shift adds a rigid offset in eV "
                 "to those reference lines only, for example for a neutral/charged "
                 "comparison. It leaves unfolded data and their weights unchanged.</li>"
                 "<li><b>Replot and export.</b> Click Plot bands after editing controls. "
@@ -1085,6 +1090,7 @@ class ViewerWidget(ipw.VBox):
                 ipw.HTML("<span style='line-height:32px;'>spectral-density controls; contrast 1 = linear</span>"),
             ]),
             ipw.HBox([self.qe_overlay, self.reference_bands_pk, self.reference_energy_shift, ipw.HTML("<span style='line-height:32px;'>eV</span>"), self.reference_linewidth, self.show_legend]),
+            self.reference_note,
             ipw.HBox([
                 self.figure_width,
                 self.figure_height,
@@ -1099,9 +1105,16 @@ class ViewerWidget(ipw.VBox):
         if autoload and self.pk.value:
             self.load()
 
-    def _invalidate_source(self, _=None):
+    def _invalidate_source(self, change=None):
         self._node_uuid = None
         self.loaded = None
+        self.reference_note.value = ""
+        if change is not None:
+            # A reference and its alignment belong to the previously loaded source.
+            self.reference_bands_pk.value = 0
+            self.reference_energy_shift.value = 0.0
+            if self.qe_overlay.value == "reference":
+                self.qe_overlay.value = "supercell"
         self.plot_button.disabled = True
         self.plot_output.clear_output(wait=False)
         self.details.clear_output(wait=False)
@@ -1133,6 +1146,11 @@ class ViewerWidget(ipw.VBox):
             if reference_bands is not None:
                 self.reference_bands_pk.value = node.pk if process_label(node) == "QeBanduppyUnfoldingWorkChain" else reference_bands.pk
                 self.qe_overlay.value = "reference"
+            else:
+                self.reference_note.value = (
+                    "No primitive reference saved with this workflow. "
+                    "A separate primitive reference can be selected by PK; see Plotting guide."
+                )
             self.plot_button.disabled = False
             html_status(self.status, "ok", f"Loaded unfolding output from PK <code>{pk}</code>. Ready to plot.")
             with self.details:

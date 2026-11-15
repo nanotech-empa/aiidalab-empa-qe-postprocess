@@ -119,7 +119,9 @@ def test_source_transition_requests_immediate_frontend_output_clear(viewer, monk
         # wait=True leaves stale DOM visible until a replacement display arrives.
         assert requests and not any(requests)
     assert "Saved previous-source" not in widget.status.value
-    assert widget.reference_energy_shift.value == 0.6
+    # A manual reference shift belongs to its source. Reloading that source
+    # preserves it; switching to another (including an invalid one) clears it.
+    assert widget.reference_energy_shift.value == (0.6 if action == "reload" else 0.0)
     assert archive.read_text() == "previous scientific export"
 
 
