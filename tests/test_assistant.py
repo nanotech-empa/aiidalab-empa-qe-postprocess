@@ -1,8 +1,10 @@
+import pytest
+
 import ipywidgets as ipw
 import numpy as np
 
 from empa_qe_postprocess import assistant, unfolding
-from aiidalab_ai_assistant.tools import ToolRegistry
+ToolRegistry = pytest.importorskip("aiidalab_ai_assistant.tools").ToolRegistry
 
 pytest_plugins = ["aiida.tools.pytest_fixtures"]
 
