@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "title": "QE post-processing",
+  "notebook": "submit_qe_unfolding.ipynb",
+  "assistant": {
+    "embedded": true
+  },
+  "capabilities": [
+    "Shared chat, AiiDA/openBIS search and current Git guidance",
+    "Fill unfolding, reference, resource and plot forms",
+    "Load existing results and plot bands",
+    "Review existing workflow submission with user execution"
+  ],
+  "workflow_guides": [
+    {
+      "id": "qe-postprocess.workflows",
+      "title": "QE post-processing operating guide",
+      "path": "docs/agents/README.md",
+      "topics": [
+        "qe-postprocess",
+        "banduppy",
+        "unfolding",
+        "reference bands"
+      ]
+    }
+  ]
+}

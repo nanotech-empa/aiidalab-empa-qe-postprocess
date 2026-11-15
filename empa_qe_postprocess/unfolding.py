@@ -612,6 +612,7 @@ class SubmissionWidget(ipw.VBox):
         self.folded_pk = ipw.IntText(value=0, description="Workflow PK", layout=ipw.Layout(width="230px"))
         self.refresh_button = ipw.Button(description="Refresh", icon="refresh", layout=ipw.Layout(width="120px"))
         self.state = {}
+        self.submitted_process_uuid = None
         for widget in (self.reference_spin, self.reference_moments, self.run_reference):
             widget.observe(self._reference_spin_changed, names="value")
         self.points_source.observe(self._set_points_from_source, names="value")
@@ -957,6 +958,7 @@ class SubmissionWidget(ipw.VBox):
             builder.reference_pw_metadata_options = orm.Dict(dict=self._resource_options(self.reference_pw_resources))
             builder.banduppy_metadata_options = orm.Dict(dict=self._resource_options(self.banduppy_resources))
             node = submit(builder)
+            self.submitted_process_uuid = str(node.uuid)
             self.folded_pk.value = node.pk
             html_status(self.status, "ok", f"Submitted QE BandUPpy unfolding WorkChain PK <code>{node.pk}</code>. Open the viewer with this PK after it finishes.")
             with self.details:
