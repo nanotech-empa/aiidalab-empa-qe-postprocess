@@ -15,8 +15,13 @@ Open **View band unfolding**, enter a completed unfolding workflow PK, and click
    **bins** controls their energy grid and **contrast** its intensity display
    (1 is linear). Sparse samples can produce broad horizontal-looking patches.
    Smoothing adds no calculated information.
-4. To compare a primitive reference, select **reference primitive lines** and its
-   **ref bands PK**. **ref shift** adds a rigid energy offset in eV to the reference
+4. If the workflow saved primitive reference bands, **ref bands PK** and
+   **reference primitive lines** are filled automatically. Otherwise the field
+   stays at 0: select a separate primitive reference by PK, or enable
+   **Run pristine primitive reference bands** when submitting a new workflow.
+   The original supercell template bands are not a pristine primitive reference.
+   Switching workflows clears the previous reference and its shift.
+   **ref shift** adds a rigid energy offset in eV to the reference
    curves only. This supports deliberate alignment, including comparisons of
    neutral and charged calculations. It does not change the unfolded eigenvalues,
    weights or stored calculation. Record the reference and the chosen shift when
