@@ -7,6 +7,7 @@ import json
 import os
 import pickle
 import re
+from tempfile import mkdtemp
 from pathlib import Path
 from urllib.parse import quote
 
@@ -17,6 +18,7 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap, PowerNorm
 import numpy as np
 from IPython.display import HTML, display
+from aiidalab.config import AIIDALAB_APPS
 from aiida import orm
 from aiida.common.links import LinkType
 from aiida.engine import submit
@@ -37,9 +39,11 @@ QeBanduppyUnfoldingWorkChain = WorkflowFactory("nanotech_empa.qe.banduppy_unfold
 
 APP_ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = APP_ROOT / "data"
-RESULTS_DIR = APP_ROOT / "results"
-DATA_DIR.mkdir(exist_ok=True)
-RESULTS_DIR.mkdir(exist_ok=True)
+# Wheel installs keep exports in the Jupyter user's served workspace.
+RESULTS_DIR = (
+    APP_ROOT / "results" if (APP_ROOT / "view_qe_unfolding.ipynb").is_file()
+    else Path.home() / "work" / "empa-qe-postprocess" / "results"
+)
 
 SPECIAL_KPOINT_PRESETS = {
     "fcc": {
@@ -1204,8 +1208,6 @@ class ViewerWidget(ipw.VBox):
             )
             fermi = data.get("fermi_energy", np.nan)
             fermi = None if np.isnan(float(fermi)) else float(fermi)
-            workdir = RESULTS_DIR / f"qe_unfolding_view_{node.pk}"
-            workdir.mkdir(parents=True, exist_ok=True)
 
             figure_width = max(2.0, float(self.figure_width.value))
             figure_height = max(2.0, float(self.figure_height.value))
@@ -1332,6 +1334,9 @@ class ViewerWidget(ipw.VBox):
                     labelspacing=0.35,
                 )
             fig.tight_layout()
+            result_dir = RESULTS_DIR / f"qe_unfolding_view_{node.pk}"
+            result_dir.mkdir(parents=True, exist_ok=True)
+            workdir = Path(mkdtemp(dir=result_dir, prefix="plot-"))
             outfile = workdir / "unfolded_bandstructure.png"
             svg_outfile = workdir / "unfolded_bandstructure.svg"
             with plt.rc_context(
@@ -1382,14 +1387,21 @@ class ViewerWidget(ipw.VBox):
 
 
 def _viewer_download_links(items):
+    apps = Path(AIIDALAB_APPS)
+    app_path = apps / APP_ROOT.name
+    if app_path.resolve() != APP_ROOT and apps.is_dir():
+        app_path = next(
+            (entry for entry in sorted(apps.iterdir()) if entry.is_symlink() and entry.resolve() == APP_ROOT),
+            app_path,
+        )
+    base_url = os.environ.get("JUPYTERHUB_SERVICE_PREFIX", "/").rstrip("/")
     links = []
     for label, path in items:
-        try:
-            relative_path = path.relative_to(APP_ROOT).as_posix()
-            base_url = os.environ.get("JUPYTERHUB_SERVICE_PREFIX", "/").rstrip("/")
-            href = f"{base_url}/files/apps/{quote(APP_ROOT.name)}/{quote(relative_path, safe='/')}"
-        except ValueError:
-            href = path.as_posix()
+        if path.is_relative_to(APP_ROOT):
+            relative_path = Path("apps") / app_path.name / path.relative_to(APP_ROOT)
+        else:
+            relative_path = path.relative_to(Path.home())
+        href = f"{base_url}/files/{quote(relative_path.as_posix(), safe='/')}"
         links.append(
             f'<a href="{escape(href)}" download>{escape(label)}</a>'
         )

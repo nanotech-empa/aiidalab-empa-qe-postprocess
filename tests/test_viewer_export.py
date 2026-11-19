@@ -156,3 +156,33 @@ def test_download_links_support_hub_prefix_and_spaces(tmp_path, monkeypatch, pre
         [("SVG", root / "results" / "bands plot.svg")]
     )
     assert f"{prefix.rstrip('/')}/files/apps/qe%20app/results/bands%20plot.svg" in link
+
+
+def test_each_render_keeps_its_downloads(viewer, monkeypatch):
+    widget, _, root = viewer
+    output = []
+    monkeypatch.setattr(unfolding, "display", output.append)
+    widget.plot()
+    first_links = output[-1].value
+    files = list(root.rglob("unfolded_bandstructure.*"))
+    assert {path.suffix for path in files} == {".png", ".svg"}
+    original = {path: path.read_bytes() for path in files}
+    widget.figure_width.value += 1
+    widget.plot()
+    second_links = output[-1].value
+    assert len(list(root.rglob("unfolded_bandstructure.*"))) == 4
+    for path, content in original.items():
+        assert path.read_bytes() == content
+        assert path.parent.name in first_links and path.parent.name not in second_links
+
+
+def test_download_uses_installed_app_alias(tmp_path, monkeypatch):
+    checkout = tmp_path / "source"
+    checkout.mkdir()
+    apps = tmp_path / "apps"
+    apps.mkdir()
+    (apps / "Band app").symlink_to(checkout, target_is_directory=True)
+    monkeypatch.setattr(unfolding, "AIIDALAB_APPS", str(apps))
+    monkeypatch.setattr(unfolding, "APP_ROOT", checkout)
+    link = unfolding._viewer_download_links([("SVG", checkout / "results" / "plot.svg")])
+    assert "/files/apps/Band%20app/results/plot.svg" in link
