@@ -5,7 +5,6 @@ from copy import deepcopy
 from html import escape
 import json
 import os
-import pickle
 import re
 from tempfile import mkdtemp
 from pathlib import Path
@@ -38,7 +37,6 @@ PwCalculation = CalculationFactory("quantumespresso.pw")
 QeBanduppyUnfoldingWorkChain = WorkflowFactory("nanotech_empa.qe.banduppy_unfolding")
 
 APP_ROOT = Path(__file__).resolve().parents[1]
-DATA_DIR = APP_ROOT / "data"
 # Wheel installs keep exports in the Jupyter user's served workspace.
 RESULTS_DIR = (
     APP_ROOT / "results" if (APP_ROOT / "view_qe_unfolding.ipynb").is_file()
@@ -407,26 +405,6 @@ def clone_pw_inputs_for_unfolding(template_calc, kpoints_node):
     builder.metadata.label = "BandUPpy folded-kpoints QE bands"
     builder.metadata.description = f"QE bands calculation on BandUPpy folded supercell k-points. Template PwCalculation PK={template_calc.pk}."
     return builder
-
-
-def state_path(folded_qe_pk):
-    return DATA_DIR / f"qe_unfolding_state_pk{int(folded_qe_pk)}.pkl"
-
-
-def save_state(folded_qe_pk, state):
-    path = state_path(folded_qe_pk)
-    path.parent.mkdir(exist_ok=True)
-    with open(path, "wb") as handle:
-        pickle.dump(state, handle)
-    return path
-
-
-def load_state(folded_qe_pk):
-    path = state_path(folded_qe_pk)
-    if not path.exists():
-        raise FileNotFoundError(f"No saved unfolding state for folded QE PK {folded_qe_pk}: {path}")
-    with open(path, "rb") as handle:
-        return pickle.load(handle)
 
 
 def qe_prefix_path_from_remote(calc):
