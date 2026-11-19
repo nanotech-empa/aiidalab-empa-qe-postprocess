@@ -40,6 +40,7 @@ def test_viewer_uses_fermi_once_and_preserves_reference_shift(
         get_bands=lambda: np.array([[-6.0], [-5.0]]),
         labels=[(0, "G"), (1, "M")],
     )
+    monkeypatch.setattr(unfolding, "APP_ROOT", tmp_path)
     monkeypatch.setattr(unfolding, "RESULTS_DIR", tmp_path)
     monkeypatch.setattr(
         unfolding.orm, "load_node", lambda _: SimpleNamespace(pk=42)
@@ -94,8 +95,8 @@ def test_viewer_uses_fermi_once_and_preserves_reference_shift(
         np.testing.assert_allclose(line.get_ydata(), np.array([-2.0, -1.0]) + reference_shift)
         np.testing.assert_array_equal(stored, original)
         assert widget.reference_energy_shift.value == reference_shift
-        assert (tmp_path / "qe_unfolding_view_42/unfolded_bandstructure.png").is_file()
-        assert (tmp_path / "qe_unfolding_view_42/unfolded_bandstructure.svg").is_file()
+        assert len(list(tmp_path.glob("qe_unfolding_view_42/plot-*/unfolded_bandstructure.png"))) == 1
+        assert len(list(tmp_path.glob("qe_unfolding_view_42/plot-*/unfolded_bandstructure.svg"))) == 1
     finally:
         widget.close()
 
