@@ -53,3 +53,11 @@ the stored workflow in the existing export app; publication remains reviewed the
 Only explicitly declared inputs and actions are available. No credentials, live
 ORM objects or arbitrary notebook namespace are exposed to chat. Form edits do
 not change engine algorithms or authorize a calculation.
+
+## Direct app destinations
+
+Read `workflow_pages` from `list_apps`. For a new unfolding workflow use
+`open_app(workflow="unfolding")`; for plotting existing results use
+`open_app(workflow="unfolding_results")`; for lookup use `workflow="search"`.
+Pass the source calculation UUID independently and use the exact returned link.
+The official Quantum ESPRESSO host remains a separate application.
