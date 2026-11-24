@@ -23,5 +23,26 @@
         "reference bands"
       ]
     }
-  ]
+  ],
+  "workflow_pages": {
+    "unfolding": {
+      "notebook": "submit_qe_unfolding.ipynb",
+      "title": "QE band unfolding",
+      "aliases": [
+        "banduppy"
+      ]
+    },
+    "unfolding_results": {
+      "notebook": "view_qe_unfolding.ipynb",
+      "title": "Plot unfolded bands",
+      "aliases": [
+        "bands",
+        "plot"
+      ]
+    },
+    "search": {
+      "notebook": "search.ipynb",
+      "title": "Search unfolding calculations"
+    }
+  }
 }
